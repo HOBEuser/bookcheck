@@ -1,1 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Book Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f9f9f9; text-align: center; }
+    .panel {
+      background: #fff;
+      border-radius: 10px;
+      padding: 2rem;
+      margin: 2rem auto;
+      max-width: 500px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      position: relative;
+    }
+    .exit-btn {
+      position: absolute; right: 1rem; top: 1rem;
+      background: #ffeaea; color: #a00; border: none;
+      font-weight: bold; font-size: 1.2rem;
+      border-radius: 50%; width: 2rem; height: 2rem;
+      cursor: pointer;
+    }
+    #qr-reader { width: 400px !important; height: 400px !important; margin: 20px auto; }
+    #result { margin-top: 1rem; font-size: 1.2rem; }
+    button { margin: 0.5rem; padding: 0.7rem 2rem; font-size: 1.1rem; border-radius: 6px; border: 1px solid #888; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <button class="exit-btn" onclick="window.location.href='index.html'">&times;</button>
+    <h2>Scan Book QR Code</h2>
+    <div id="qr-reader"></div>
+    <div id="result"></div>
+    <button id="checkout" style="display:none;">Check Out</button>
+    <button id="return" style="display:none;">Return</button>
+  </div>
+  <script>
+    // --- CONFIGURE YOUR URLs ---
+    const SHEET_CSV_URL = 'PASTE_YOUR_BOOK_LIST_CSV_URL_HERE';
+    const APPS_SCRIPT_API = 'PASTE_YOUR_GOOGLE_APPS_SCRIPT_URL_HERE';
 
+    let currentBook = null;
+    let books = {};
+
+    function normalizeBookId(id) {
+      return String(id).trim();
+    }
+
+    function loadBooks() {
+      fetch(SHEET_CSV_URL)
+        .then(r => r.text())
+        .then(csv => {
+          Papa.parse(csv, {
+            header: true,
+            complete: function(results) {
+              books = {};
+              results.data.forEach(row => {
+                if (row['Book ID']) {
+                  const normalizedID = normalizeBookId(row['Book ID']);
+                  books[normalizedID] = row;
+                }
+              });
+            }
+          });
+        });
+    }
+
+    function showActions(status) {
+      document.getElementById('checkout').style.display = status === 'ready' ? '' : 'none';
+      document.getElementById('return').style.display = status === 'checked_out' ? '' : 'none';
+    }
+
+    function clearResultAndActions() {
+      document.getElementById('result').innerText = '';
+      document.getElementById('checkout').style.display = 'none';
+      document.getElementById('return').style.display = 'none';
+      currentBook = null;
+    }
+
+    function onScanSuccess(decodedText) {
+      currentBook = normalizeBookId(decodedText);
+      if (books[currentBook]) {
+        let b = books[currentBook];
+        document.getElementById('result').innerText =
+          `Title: ${b.Title || ''}\nStatus: ${b.Status || ''}\nBorrower: ${b.Borrower || ''}`;
+        showActions(b.Status);
+      } else {
+        document.getElementById('result').innerText = 'Book not found!';
+        showActions('');
+      }
+    }
+
+    // Set up QR scanner but don't start yet
+    var scanner = new Html5QrcodeScanner('qr-reader', { fps: 10, qrbox: 350, rememberLastUsedCamera: true }, false);
+
+    document.getElementById('checkout').onclick = function() {
+      let borrower = prompt("Enter borrower's name:");
+      if (!borrower) return;
+      fetch(`${APPS_SCRIPT_API}?bookid=${encodeURIComponent(currentBook)}&status=checked_out&borrower=${encodeURIComponent(borrower)}`)
+        .then(r => r.text())
+        .then(res => {
+          alert("Checked out!");
+          loadBooks();
+          document.getElementById('result').innerText = 'Book checked out!';
+          setTimeout(clearResultAndActions, 2000);
+        });
+    };
+
+    document.getElementById('return').onclick = function() {
+      fetch(`${APPS_SCRIPT_API}?bookid=${encodeURIComponent(currentBook)}&status=ready&borrower=`)
+        .then(r => r.text())
+        .then(res => {
+          alert("Returned!");
+          loadBooks();
+          document.getElementById('result').innerText = 'Book returned!';
+          setTimeout(clearResultAndActions, 2000);
+        });
+    };
+
+    // Load the books and start the scanner
+    window.onload = function() {
+      loadBooks();
+      scanner.render(onScanSuccess);
+    };
+  </script>
+  <!-- PapaParse library for CSV parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</body>
+</html>

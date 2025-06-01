@@ -2,52 +2,79 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Book Scanner</title>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <title>Library Book System</title>
+  <!-- QuaggaJS for barcode scanning -->
+  <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
-    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f9f9f9; text-align: center; }
-    .panel {
-      background: #fff;
-      border-radius: 10px;
-      padding: 2rem;
-      margin: 2rem auto;
-      max-width: 500px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-      position: relative;
+    body {
+      min-height: 100vh;
+      margin: 0;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f9f9f9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
     }
-    .exit-btn {
-      position: absolute; right: 1rem; top: 1rem;
-      background: #ffeaea; color: #a00; border: none;
-      font-weight: bold; font-size: 1.2rem;
-      border-radius: 50%; width: 2rem; height: 2rem;
-      cursor: pointer;
+    /* ... your other CSS ... */
+    #barcode-scanner {
+      width: 400px;
+      height: 300px;
+      margin: 20px auto;
+      background: #222;
+      border-radius: 8px;
+      overflow: hidden;
     }
-    #qr-reader { width: 400px !important; height: 400px !important; margin: 20px auto; }
-    #result { margin-top: 1rem; font-size: 1.2rem; }
-    button { margin: 0.5rem; padding: 0.7rem 2rem; font-size: 1.1rem; border-radius: 6px; border: 1px solid #888; }
   </style>
 </head>
 <body>
-  <div class="panel">
-    <button class="exit-btn" onclick="window.location.href='index.html'">&times;</button>
-    <h2>Scan Book QR Code</h2>
-    <div id="qr-reader"></div>
+  <!-- Main Menu -->
+  <div id="main-menu" class="centered panel">
+    <h2>Welcome to the Library System</h2>
+    <button id="btn-scan">Scan/Check Out Book</button>
+    <button id="btn-catalog">Catalog Search</button>
+  </div>
+
+  <!-- Scan/Check Out Panel -->
+  <div id="scan-panel" class="panel hidden">
+    <button class="exit-btn" id="exit-scan" title="Back to main menu">&times;</button>
+    <h2>Scan Book Barcode</h2>
+    <div id="barcode-scanner"></div>
     <div id="result"></div>
     <button id="checkout" style="display:none;">Check Out</button>
     <button id="return" style="display:none;">Return</button>
   </div>
+
+  <!-- Catalog Panel ... (unchanged) ... -->
+
   <script>
-    // --- CONFIGURE YOUR URLs ---
-    const SHEET_CSV_URL = 'PASTE_YOUR_BOOK_LIST_CSV_URL_HERE';
-    const APPS_SCRIPT_API = 'PASTE_YOUR_GOOGLE_APPS_SCRIPT_URL_HERE';
+    // Sheet config (update as needed)
+    const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSIHuXH2AymDJS6AptJXbndgsJunFKd0RVF1hmp5IWsg1gtR69onrgThyScblVQsztwfH-kmAbzLkGu/pub?gid=0&single=true&output=csv';
+    const APPS_SCRIPT_API = 'https://script.google.com/macros/s/AKfycbxdjzAeU826Us0FolSfYnProhstxCnxPCwb-PYz_FHrEVITtnrikJMPRZcMZd_gnLlz/exec';
 
-    let currentBook = null;
+    // Main Menu Navigation
+    const mainMenu = document.getElementById('main-menu');
+    const scanPanel = document.getElementById('scan-panel');
+    document.getElementById('btn-scan').onclick = () => {
+      mainMenu.classList.add('hidden');
+      scanPanel.classList.remove('hidden');
+      startBarcodeScanner();
+    };
+    document.getElementById('exit-scan').onclick = () => {
+      scanPanel.classList.add('hidden');
+      mainMenu.classList.remove('hidden');
+      stopBarcodeScanner();
+      document.getElementById('result').innerText = '';
+      clearResultAndActions();
+    };
+
+    // Book Data
     let books = {};
-
+    let currentBook = null;
     function normalizeBookId(id) {
       return String(id).trim();
     }
-
     function loadBooks() {
       fetch(SHEET_CSV_URL)
         .then(r => r.text())
@@ -67,33 +94,58 @@
         });
     }
 
+    // Barcode Scanning Logic
+    function startBarcodeScanner() {
+      Quagga.init({
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: document.querySelector('#barcode-scanner'),
+          constraints: { facingMode: "environment" }
+        },
+        decoder: {
+          readers: ["ean_reader", "ean_13_reader", "upc_reader", "upc_e_reader"]
+        }
+      }, function(err) {
+        if (err) {
+          document.getElementById('result').innerText = "Camera error: " + err;
+          return;
+        }
+        Quagga.start();
+      });
+
+      Quagga.onDetected(onBarcodeDetected);
+    }
+    function stopBarcodeScanner() {
+      Quagga.stop();
+      Quagga.offDetected(onBarcodeDetected);
+    }
+
+    function onBarcodeDetected(result) {
+      const code = result.codeResult.code;
+      if (books[code]) {
+        currentBook = code;
+        let b = books[code];
+        document.getElementById('result').innerText =
+          `Title: ${b.Title || ''}\nStatus: ${b.Status || ''}\nBorrower: ${b.Borrower || ''}`;
+        showActions(b.Status);
+      } else {
+        document.getElementById('result').innerText = "Book not found in library!";
+        showActions('');
+      }
+      stopBarcodeScanner(); // Stop after scan
+    }
+
     function showActions(status) {
       document.getElementById('checkout').style.display = status === 'ready' ? '' : 'none';
       document.getElementById('return').style.display = status === 'checked_out' ? '' : 'none';
     }
-
     function clearResultAndActions() {
       document.getElementById('result').innerText = '';
       document.getElementById('checkout').style.display = 'none';
       document.getElementById('return').style.display = 'none';
       currentBook = null;
     }
-
-    function onScanSuccess(decodedText) {
-      currentBook = normalizeBookId(decodedText);
-      if (books[currentBook]) {
-        let b = books[currentBook];
-        document.getElementById('result').innerText =
-          `Title: ${b.Title || ''}\nStatus: ${b.Status || ''}\nBorrower: ${b.Borrower || ''}`;
-        showActions(b.Status);
-      } else {
-        document.getElementById('result').innerText = 'Book not found!';
-        showActions('');
-      }
-    }
-
-    // Set up QR scanner but don't start yet
-    var scanner = new Html5QrcodeScanner('qr-reader', { fps: 10, qrbox: 350, rememberLastUsedCamera: true }, false);
 
     document.getElementById('checkout').onclick = function() {
       let borrower = prompt("Enter borrower's name:");
@@ -107,7 +159,6 @@
           setTimeout(clearResultAndActions, 2000);
         });
     };
-
     document.getElementById('return').onclick = function() {
       fetch(`${APPS_SCRIPT_API}?bookid=${encodeURIComponent(currentBook)}&status=ready&borrower=`)
         .then(r => r.text())
@@ -119,13 +170,8 @@
         });
     };
 
-    // Load the books and start the scanner
-    window.onload = function() {
-      loadBooks();
-      scanner.render(onScanSuccess);
-    };
+    loadBooks();
+    // ... Catalog search logic remains unchanged ...
   </script>
-  <!-- PapaParse library for CSV parsing -->
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 </body>
 </html>

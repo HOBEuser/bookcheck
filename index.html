@@ -17,7 +17,40 @@
       align-items: center;
       justify-content: flex-start;
     }
-    /* ... your other CSS ... */
+    .hidden { display: none !important; }
+    .centered {
+      margin-top: 5vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .panel {
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      background: #fff;
+      border-radius: 10px;
+      padding: 2rem;
+      margin: 2rem auto;
+      max-width: 500px;
+      width: 90vw;
+      transition: box-shadow 0.2s;
+      position: relative;
+    }
+    .exit-btn {
+      position: absolute;
+      right: 1rem;
+      top: 1rem;
+      background: #ffeaea;
+      color: #a00;
+      border: none;
+      font-weight: bold;
+      font-size: 1.2rem;
+      border-radius: 50%;
+      width: 2rem;
+      height: 2rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .exit-btn:hover { background: #ffd6d6; }
     #barcode-scanner {
       width: 400px;
       height: 300px;
@@ -26,6 +59,16 @@
       border-radius: 8px;
       overflow: hidden;
     }
+    button {
+      margin: 0.5rem;
+      padding: 0.7rem 2rem;
+      font-size: 1.1rem;
+      border-radius: 6px;
+      border: 1px solid #888;
+      transition: background 0.2s;
+      cursor: pointer;
+    }
+    button:hover { background: #e0e0e0; }
   </style>
 </head>
 <body>
@@ -33,7 +76,6 @@
   <div id="main-menu" class="centered panel">
     <h2>Welcome to the Library System</h2>
     <button id="btn-scan">Scan/Check Out Book</button>
-    <button id="btn-catalog">Catalog Search</button>
   </div>
 
   <!-- Scan/Check Out Panel -->
@@ -45,8 +87,6 @@
     <button id="checkout" style="display:none;">Check Out</button>
     <button id="return" style="display:none;">Return</button>
   </div>
-
-  <!-- Catalog Panel ... (unchanged) ... -->
 
   <script>
     // Sheet config (update as needed)
@@ -171,7 +211,6 @@
     };
 
     loadBooks();
-    // ... Catalog search logic remains unchanged ...
   </script>
 </body>
 </html>
